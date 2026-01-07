@@ -1,0 +1,67 @@
+# Values para Backend - ambiente VN-DEV
+# Este archivo se usa junto con el chart de ECR: oci://002419998824.dkr.ecr.us-east-1.amazonaws.com/helm-charts/devtools-playground
+# Cluster: vn-dev-eks
+
+# External RDS Configuration
+# RDS desplegado con Terragrunt: /Users/sergioortiz/Documents/GitHub/infra-live-vn/aws/us-east-1/dev/rds/
+externalDatabase:
+  enabled: true
+  host: "vn-dev-db.cilgeca4km3j.us-east-1.rds.amazonaws.com"
+  port: "5432"
+  database: "roadmapvndev"
+  username: "postgres"
+  existingSecret: "rds-postgresql-secret"
+  existingSecretKey: "password"
+
+# Backend Configuration
+backend:
+  enabled: true
+  image:
+    repository: 002419998824.dkr.ecr.us-east-1.amazonaws.com/devtools-backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    PYTHONUNBUFFERED: "1"
+    CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,*"
+    # Database configuration - explicit to avoid hostname resolution issues
+    DB_HOST: "vn-dev-db.cilgeca4km3j.us-east-1.rds.amazonaws.com"
+    DB_PORT: "5432"
+    DB_NAME: "roadmapvndev"
+    DB_USER: "postgres"
+    # DB_PASSWORD will be set from the secret via the chart
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 40
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Frontend - deshabilitado (se despliega desde su propio repo)
+frontend:
+  enabled: false
+
+# Ingress - deshabilitado (se maneja desde el repo del frontend)
+ingress:
+  enabled: false
+
