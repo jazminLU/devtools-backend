@@ -1,9 +1,4 @@
-# Values para Backend - ambiente VN-DEV
-# Este archivo se usa junto con el chart de ECR: oci://558497223978.dkr.ecr.us-east-1.amazonaws.com/helm-charts/devtools-playground
-# Cluster: vn-dev-eks
 
-# External RDS Configuration
-# RDS desplegado con Terragrunt: /Users/sergioortiz/Documents/GitHub/infra-live-vn/aws/us-east-1/dev/rds/
 externalDatabase:
   enabled: true
   host: "vn-dev-db.cilgeca4km3j.us-east-1.rds.amazonaws.com"
