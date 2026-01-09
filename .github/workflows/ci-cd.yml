@@ -257,8 +257,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    # Se ejecuta después de build-and-push (incluso si falla)
-    if: always()
+    # Solo se ejecuta si build-and-push fue exitoso
+    if: success()
     
     steps:
       - name: Checkout code
