@@ -1,5 +1,5 @@
 # Values para Backend - ambiente VN-DEV
-# Este archivo se usa junto con el chart de ECR: oci://002419998824.dkr.ecr.us-east-1.amazonaws.com/helm-charts/devtools-playground
+# Este archivo se usa junto con el chart de ECR: oci://558497223978.dkr.ecr.us-east-1.amazonaws.com/helm-charts/devtools-playground
 # Cluster: vn-dev-eks
 
 # External RDS Configuration
@@ -17,7 +17,7 @@ externalDatabase:
 backend:
   enabled: true
   image:
-    repository: 002419998824.dkr.ecr.us-east-1.amazonaws.com/devtools-backend
+    repository: 558497223978.dkr.ecr.us-east-1.amazonaws.com/moon-backend
     tag: "latest"
     pullPolicy: IfNotPresent
   replicas: 2
