@@ -186,11 +186,10 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
-    needs: sonarcloud-analysis
+    # Sin dependencias - se ejecuta siempre independientemente de otros jobs
     permissions:
       id-token: write
       contents: read
-    # Siempre se ejecuta después de sonarcloud-analysis (ignora resultado)
     
     steps:
       - name: Checkout code
@@ -258,7 +257,8 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    # Siempre se ejecuta después de build-and-push
+    # Se ejecuta después de build-and-push (incluso si falla)
+    if: always()
     
     steps:
       - name: Checkout code
