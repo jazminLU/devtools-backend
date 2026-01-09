@@ -24,10 +24,12 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: 002419998824.dkr.ecr.us-east-1.amazonaws.com
-  IMAGE_REPO: devtools-backend
-  HELM_CHART_REPO: helm-charts/devtools-playground
+  AWS_ACCOUNT_ID: 558497223978
+  ECR_REGISTRY: 558497223978.dkr.ecr.us-east-1.amazonaws.com
+  IMAGE_REPO: moon-backend
+  HELM_CHART_REPO: devtools-playground
   HELM_CHART_NAME: devtools-playground-backend
+  EKS_CLUSTER_NAME: moon-dev-eks
   SONAR_ORG: sergioortiz17
   SONAR_PROJECT_KEY: sergioortiz17_devtools-backend
 
@@ -36,9 +38,7 @@ jobs:
   lint-and-test:
     name: Lint and Unit Tests
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request'
+    # Siempre se ejecuta para push, pull_request y workflow_dispatch
     
     steps:
       - name: Checkout code
@@ -123,9 +123,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request'
+    # Siempre se ejecuta después de lint-and-test
     
     steps:
       - name: Checkout code
@@ -192,9 +190,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    if: |
-      (github.event_name == 'workflow_dispatch' && inputs.build_image == true) ||
-      (github.event_name == 'push' && (needs.sonarcloud-analysis.result == 'success' || needs.sonarcloud-analysis.result == 'failure' || needs.sonarcloud-analysis.result == 'skipped'))
+    # Siempre se ejecuta después de sonarcloud-analysis (ignora resultado)
     
     steps:
       - name: Checkout code
@@ -203,7 +199,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::002419998824:role/github-actions-devtools-playground
+          role-to-assume: arn:aws:iam::558497223978:role/github-actions-devtools-backend
           role-session-name: GitHubActions-Backend-Build
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
@@ -262,9 +258,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    if: |
-      github.event_name == 'workflow_dispatch' && inputs.deploy_dev == true ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Siempre se ejecuta después de build-and-push
     
     steps:
       - name: Checkout code
@@ -273,7 +267,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::002419998824:role/github-actions-devtools-playground
+          role-to-assume: arn:aws:iam::558497223978:role/github-actions-devtools-backend
           role-session-name: GitHubActions-Backend-Deploy
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
@@ -290,7 +284,7 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          aws eks update-kubeconfig --name vn-dev-eks --region ${{ env.AWS_REGION }}
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
       - name: Authenticate Helm with ECR
         run: |
@@ -334,6 +328,7 @@ jobs:
             --create-namespace \
             --values helm/values-vn-dev.yaml \
             --set backend.enabled=true \
+            --set backend.image.repository=${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }} \
             --set backend.image.tag=${{ steps.sha.outputs.short_sha }} \
             --set frontend.enabled=false
           
