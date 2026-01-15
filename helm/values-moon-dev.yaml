@@ -1,0 +1,59 @@
+
+externalDatabase:
+  enabled: true
+  host: "moon-dev-db.cut6myocef6c.us-east-1.rds.amazonaws.com"
+  port: "5432"
+  database: "dbmoondev"
+  username: "postgres"
+  existingSecret: "rds-postgresql-secret"
+  existingSecretKey: "password"
+
+backend:
+  enabled: true
+  image:
+    repository: 558497223978.dkr.ecr.us-east-1.amazonaws.com/moon-backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    PYTHONUNBUFFERED: "1"
+    CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,https://app.infra-moon.com,http://app.infra-moon.com,*"
+
+    DB_HOST: "moon-dev-db.cut6myocef6c.us-east-1.rds.amazonaws.com"
+    DB_PORT: "5432"
+    DB_NAME: "dbmoondev"
+    DB_USER: "postgres"
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 40
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+frontend:
+  enabled: false
+
+ingress:
+  enabled: false
+
