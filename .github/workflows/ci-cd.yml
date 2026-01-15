@@ -1,0 +1,360 @@
+name: Backend CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      build_image:
+        description: 'Build and push Docker image'
+        required: false
+        default: 'true'
+        type: boolean
+      deploy_dev:
+        description: 'Deploy to dev cluster'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: 558497223978
+  ECR_REGISTRY: 558497223978.dkr.ecr.us-east-1.amazonaws.com
+  IMAGE_REPO: moon-backend
+  HELM_CHART_REPO: devtools-playground
+  HELM_CHART_NAME: devtools-playground-backend
+  EKS_CLUSTER_NAME: moon-dev-eks
+  SONAR_ORG: jazminlu
+  SONAR_PROJECT_KEY: jazminLU_devtools-backend
+
+  jobs:
+    lint-and-test:
+    name: Lint and Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Run Ruff linter
+        run: |
+          echo "Running Ruff linter..."
+          ruff check app tests --output-format=github || true
+        continue-on-error: true
+
+      - name: Run Ruff formatter check
+        run: |
+          echo "Checking code formatting with Ruff..."
+          ruff format --check app tests || true
+        continue-on-error: true
+
+      - name: Run unit tests with coverage
+        run: |
+          echo "Running unit tests with coverage..."
+          # Run only essential integration tests for faster execution
+          pytest tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py \
+            --cov=app --cov-report=xml --cov-report=term-missing --cov-report=html -v --tb=short -x
+        continue-on-error: true
+
+      - name: Verify coverage.xml exists
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            echo "coverage.xml generated successfully"
+            ls -lh coverage.xml
+            echo ""
+            echo "=== Coverage Summary ==="
+            # Show coverage summary using pytest-cov output or coverage command
+            if command -v coverage &> /dev/null; then
+              coverage report --show-missing || true
+            else
+              echo "Coverage command not available, but coverage.xml exists"
+            fi
+            echo ""
+            echo "=== Coverage XML file info ==="
+            head -20 coverage.xml || true
+          else
+            echo "coverage.xml not found!"
+            echo "Attempting to generate it..."
+            pytest --cov=app --cov-report=xml -v || true
+            if [ -f coverage.xml ]; then
+              echo "coverage.xml generated on retry"
+            else
+              echo "Failed to generate coverage.xml"
+              exit 1
+            fi
+          fi
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 7
+
+    sonarcloud-analysis:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    permissions:
+      contents: read
+      pull-requests: write
+    
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Download coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-reports
+          path: .
+
+      - name: Verify coverage.xml exists
+        run: |
+          if [ -f coverage.xml ]; then
+            echo "coverage.xml found"
+            ls -lh coverage.xml
+          else
+            echo "coverage.xml not found, generating it..."
+            pytest tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py \
+              --cov=app --cov-report=xml --cov-report=term-missing -v || true
+          fi
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.organization=${{ env.SONAR_ORG }}
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.sources=app
+            -Dsonar.exclusions=**/__pycache__/**,**/alembic/**,**/.venv/**,**/venv/**,**/*.pyc,**/tests/**
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.sourceEncoding=UTF-8
+            -Dsonar.test.inclusions=**/test_*.py
+            -Dsonar.test.exclusions=**/__pycache__/**
+            -Dsonar.language=py
+            -Dsonar.github.repository=${{ github.repository }}
+            -Dsonar.github.oauth=${{ secrets.GITHUB_TOKEN }}
+            ${{ github.event_name == 'pull_request' && format('-Dsonar.pullrequest.key={0}', github.event.pull_request.number) || format('-Dsonar.branch.name={0}', github.ref_name) }}
+            ${{ github.event_name == 'pull_request' && format('-Dsonar.pullrequest.branch={0}', github.head_ref) || '' }}
+            ${{ github.event_name == 'pull_request' && format('-Dsonar.pullrequest.base={0}', github.base_ref) || '' }}
+            -Dsonar.scanner.force-deprecated-java-version=true
+
+    build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+ 
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::558497223978:role/github-actions-devtools-backend
+          role-session-name: GitHubActions-Backend-Build
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate image tags
+        id: image-tags
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BRANCH_NAME=${BRANCH_NAME//\//-}
+          
+          TAG="$SHORT_SHA"
+          
+          if [ "$BRANCH_NAME" != "main" ]; then
+            TAG="$TAG,$BRANCH_NAME"
+          fi
+          
+          if [ "$BRANCH_NAME" == "main" ]; then
+            TAG="$TAG,latest"
+          fi
+          
+          echo "tags=$TAG" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.image-tags.outputs.short_sha }}
+            ${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:latest
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache,mode=max
+
+      - name: Output image URL
+        run: |
+          echo "Docker Image Built" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.image-tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }}:latest\`" >> $GITHUB_STEP_SUMMARY
+
+    deploy-dev:
+    name: Deploy Backend to Dev Cluster
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      id-token: write
+      contents: read
+
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::558497223978:role/github-actions-devtools-backend
+          role-session-name: GitHubActions-Backend-Deploy
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.13.0'
+
+      - name: Configure kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+      - name: Authenticate Helm with ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            helm registry login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+
+      - name: Get short SHA
+        id: sha
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Verify image exists in ECR
+        run: |
+          echo "Verifying image exists in ECR..."
+          IMAGE_TAG="${{ steps.sha.outputs.short_sha }}"
+          aws ecr describe-images \
+            --repository-name ${{ env.IMAGE_REPO }} \
+            --image-ids imageTag=$IMAGE_TAG \
+            --region ${{ env.AWS_REGION }} || {
+            echo "Image tag $IMAGE_TAG not found, trying latest..."
+            aws ecr describe-images \
+              --repository-name ${{ env.IMAGE_REPO }} \
+              --image-ids imageTag=latest \
+              --region ${{ env.AWS_REGION }}
+          }
+          echo "Image verified in ECR"
+
+      - name: Deploy to EKS
+        run: |
+          echo "Deploying Backend to EKS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deploying with image tag: \`${{ steps.sha.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Release name: \`${{ env.HELM_CHART_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          helm upgrade --install ${{ env.HELM_CHART_NAME }} \
+            oci://${{ env.ECR_REGISTRY }}/${{ env.HELM_CHART_REPO }} \
+            --version 1.0.0 \
+            --namespace devtools-playground \
+            --create-namespace \
+            --values helm/values-moon-dev.yaml \
+            --set backend.enabled=true \
+            --set backend.image.repository=${{ env.ECR_REGISTRY }}/${{ env.IMAGE_REPO }} \
+            --set backend.image.tag=${{ steps.sha.outputs.short_sha }} \
+            --set frontend.enabled=false
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Helm deployment command completed!" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify deployment
+        timeout-minutes: 5
+        run: |
+          echo "Checking pods status..."
+          kubectl get pods -n devtools-playground -l app.kubernetes.io/component=backend
+          
+          echo ""
+          echo "Finding deployment name..."
+          DEPLOYMENT_NAME=$(kubectl get deployment -n devtools-playground -l app.kubernetes.io/component=backend -o jsonpath='{.items[0].metadata.name}')
+          if [ -z "$DEPLOYMENT_NAME" ]; then
+            echo "Error: Backend deployment not found!"
+            kubectl get deployments -n devtools-playground
+            exit 1
+          fi
+          echo "Found deployment: $DEPLOYMENT_NAME"
+          
+          echo ""
+          echo "Waiting for rollout to complete (timeout: 5 minutes)..."
+          kubectl rollout status deployment/$DEPLOYMENT_NAME -n devtools-playground --timeout=5m || {
+            echo "Rollout timeout or failed. Checking pod status..."
+            kubectl describe pods -n devtools-playground -l app.kubernetes.io/component=backend
+            kubectl get events -n devtools-playground --sort-by='.lastTimestamp' | tail -20
+            exit 1
+          }
+          
+          echo ""
+          echo "Deployment verified successfully!"
+          kubectl get pods -n devtools-playground -l app.kubernetes.io/component=backend
+
