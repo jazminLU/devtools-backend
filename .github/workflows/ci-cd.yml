@@ -46,8 +46,8 @@ jobs:
     uses: ./.github/workflows/cicd-templates/sonarcloud-analysis.yml
     with:
       python_version: '3.11'
-      sonar_org: ${{ env.SONAR_ORG }}
-      sonar_project_key: ${{ env.SONAR_PROJECT_KEY }}
+      sonar_org: jazminlu
+      sonar_project_key: jazminLU_devtools-backend
       test_files: 'tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py'
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -56,10 +56,10 @@ jobs:
     needs: sonarcloud-analysis
     uses: ./.github/workflows/cicd-templates/build-and-push.yml
     with:
-      aws_region: ${{ env.AWS_REGION }}
-      ecr_registry: ${{ env.ECR_REGISTRY }}
-      image_repo: ${{ env.IMAGE_REPO }}
-      aws_role_arn: ${{ env.AWS_ROLE_ARN }}
+      aws_region: us-east-1
+      ecr_registry: 558497223978.dkr.ecr.us-east-1.amazonaws.com
+      image_repo: moon-backend
+      aws_role_arn: arn:aws:iam::558497223978:role/github-actions-devtools-backend
       dockerfile_path: './Dockerfile'
       context_path: '.'
     secrets:
@@ -70,16 +70,16 @@ jobs:
     if: success()
     uses: ./.github/workflows/cicd-templates/deploy-dev.yml
     with:
-      aws_region: ${{ env.AWS_REGION }}
-      ecr_registry: ${{ env.ECR_REGISTRY }}
-      image_repo: ${{ env.IMAGE_REPO }}
-      eks_cluster_name: ${{ env.EKS_CLUSTER_NAME }}
-      helm_chart_repo: ${{ env.HELM_CHART_REPO }}
-      helm_chart_name: ${{ env.HELM_CHART_NAME }}
+      aws_region: us-east-1
+      ecr_registry: 558497223978.dkr.ecr.us-east-1.amazonaws.com
+      image_repo: moon-backend
+      eks_cluster_name: moon-dev-eks
+      helm_chart_repo: devtools-playground
+      helm_chart_name: devtools-playground-backend
       helm_chart_version: '1.0.0'
       namespace: 'devtools-playground'
       values_file: 'helm/values-moon-dev.yaml'
-      aws_role_arn: ${{ env.AWS_ROLE_ARN }}
+      aws_role_arn: arn:aws:iam::558497223978:role/github-actions-devtools-backend
       helm_version: '3.13.0'
     secrets:
       AWS_ROLE_SESSION_NAME: 'GitHubActions-Backend-Deploy'
