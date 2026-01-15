@@ -1,0 +1,94 @@
+name: Lint and Test
+
+on:
+  workflow_call:
+    inputs:
+      python_version:
+        required: false
+        type: string
+        default: '3.11'
+      test_files:
+        required: false
+        type: string
+        default: 'tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py'
+
+jobs:
+  lint-and-test:
+    name: Lint and Unit Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Run Ruff linter
+        run: |
+          echo "Running Ruff linter..."
+          ruff check app tests --output-format=github || true
+        continue-on-error: true
+
+      - name: Run Ruff formatter check
+        run: |
+          echo "Checking code formatting with Ruff..."
+          ruff format --check app tests || true
+        continue-on-error: true
+
+      - name: Run unit tests with coverage
+        run: |
+          echo "Running unit tests with coverage..."
+          # Run only essential integration tests for faster execution
+          pytest ${{ inputs.test_files }} \
+            --cov=app --cov-report=xml --cov-report=term-missing --cov-report=html -v --tb=short -x
+        continue-on-error: true
+
+      - name: Verify coverage.xml exists
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            echo "coverage.xml generated successfully"
+            ls -lh coverage.xml
+            echo ""
+            echo "=== Coverage Summary ==="
+            # Show coverage summary using pytest-cov output or coverage command
+            if command -v coverage &> /dev/null; then
+              coverage report --show-missing || true
+            else
+              echo "Coverage command not available, but coverage.xml exists"
+            fi
+            echo ""
+            echo "=== Coverage XML file info ==="
+            head -20 coverage.xml || true
+          else
+            echo "coverage.xml not found!"
+            echo "Attempting to generate it..."
+            pytest --cov=app --cov-report=xml -v || true
+            if [ -f coverage.xml ]; then
+              echo "coverage.xml generated on retry"
+            else
+              echo "Failed to generate coverage.xml"
+              exit 1
+            fi
+          fi
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 7
+

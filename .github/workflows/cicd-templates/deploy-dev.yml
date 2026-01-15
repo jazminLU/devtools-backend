@@ -1,0 +1,158 @@
+name: Deploy to Dev Cluster
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        required: true
+        type: string
+      ecr_registry:
+        required: true
+        type: string
+      image_repo:
+        required: true
+        type: string
+      eks_cluster_name:
+        required: true
+        type: string
+      helm_chart_repo:
+        required: true
+        type: string
+      helm_chart_name:
+        required: true
+        type: string
+      helm_chart_version:
+        required: false
+        type: string
+        default: '1.0.0'
+      namespace:
+        required: false
+        type: string
+        default: 'devtools-playground'
+      values_file:
+        required: false
+        type: string
+        default: 'helm/values-moon-dev.yaml'
+      aws_role_arn:
+        required: true
+        type: string
+      helm_version:
+        required: false
+        type: string
+        default: '3.13.0'
+    secrets:
+      AWS_ROLE_SESSION_NAME:
+        required: false
+
+jobs:
+  deploy-dev:
+    name: Deploy Backend to Dev Cluster
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn }}
+          role-session-name: ${{ secrets.AWS_ROLE_SESSION_NAME || 'GitHubActions-Backend-Deploy' }}
+          aws-region: ${{ inputs.aws_region }}
+          audience: sts.amazonaws.com
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: ${{ inputs.helm_version }}
+
+      - name: Configure kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ inputs.eks_cluster_name }} --region ${{ inputs.aws_region }}
+
+      - name: Authenticate Helm with ECR
+        run: |
+          aws ecr get-login-password --region ${{ inputs.aws_region }} | \
+            helm registry login --username AWS --password-stdin ${{ inputs.ecr_registry }}
+
+      - name: Get short SHA
+        id: sha
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Verify image exists in ECR
+        run: |
+          echo "Verifying image exists in ECR..."
+          IMAGE_TAG="${{ steps.sha.outputs.short_sha }}"
+          aws ecr describe-images \
+            --repository-name ${{ inputs.image_repo }} \
+            --image-ids imageTag=$IMAGE_TAG \
+            --region ${{ inputs.aws_region }} || {
+            echo "Image tag $IMAGE_TAG not found, trying latest..."
+            aws ecr describe-images \
+              --repository-name ${{ inputs.image_repo }} \
+              --image-ids imageTag=latest \
+              --region ${{ inputs.aws_region }}
+          }
+          echo "Image verified in ECR"
+
+      - name: Deploy to EKS
+        run: |
+          echo "Deploying Backend to EKS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deploying with image tag: \`${{ steps.sha.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Release name: \`${{ inputs.helm_chart_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          helm upgrade --install ${{ inputs.helm_chart_name }} \
+            oci://${{ inputs.ecr_registry }}/${{ inputs.helm_chart_repo }} \
+            --version ${{ inputs.helm_chart_version }} \
+            --namespace ${{ inputs.namespace }} \
+            --create-namespace \
+            --values ${{ inputs.values_file }} \
+            --set backend.enabled=true \
+            --set backend.image.repository=${{ inputs.ecr_registry }}/${{ inputs.image_repo }} \
+            --set backend.image.tag=${{ steps.sha.outputs.short_sha }} \
+            --set frontend.enabled=false
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Helm deployment command completed!" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify deployment
+        timeout-minutes: 5
+        run: |
+          echo "Checking pods status..."
+          kubectl get pods -n ${{ inputs.namespace }} -l app.kubernetes.io/component=backend
+          
+          echo ""
+          echo "Finding deployment name..."
+          DEPLOYMENT_NAME=$(kubectl get deployment -n ${{ inputs.namespace }} -l app.kubernetes.io/component=backend -o jsonpath='{.items[0].metadata.name}')
+          if [ -z "$DEPLOYMENT_NAME" ]; then
+            echo "Error: Backend deployment not found!"
+            kubectl get deployments -n ${{ inputs.namespace }}
+            exit 1
+          fi
+          echo "Found deployment: $DEPLOYMENT_NAME"
+          
+          echo ""
+          echo "Waiting for rollout to complete (timeout: 5 minutes)..."
+          kubectl rollout status deployment/$DEPLOYMENT_NAME -n ${{ inputs.namespace }} --timeout=5m || {
+            echo "Rollout timeout or failed. Checking pod status..."
+            kubectl describe pods -n ${{ inputs.namespace }} -l app.kubernetes.io/component=backend
+            kubectl get events -n ${{ inputs.namespace }} --sort-by='.lastTimestamp' | tail -20
+            exit 1
+          }
+          
+          echo ""
+          echo "Deployment verified successfully!"
+          kubectl get pods -n ${{ inputs.namespace }} -l app.kubernetes.io/component=backend
+
