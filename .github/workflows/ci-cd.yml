@@ -33,7 +33,7 @@ env:
   SONAR_ORG: jazminlu
   SONAR_PROJECT_KEY: jazminLU_devtools-backend
 
-  jobs:
+jobs:
     lint-and-test:
     name: Lint and Unit Tests
     runs-on: ubuntu-latest
