@@ -43,6 +43,9 @@ jobs:
 
   sonarcloud-analysis:
     needs: lint-and-test
+    permissions:
+      contents: read
+      pull-requests: write
     uses: ./.github/workflows/template-sonarcloud-analysis.yml
     with:
       python_version: '3.11'
@@ -54,6 +57,9 @@ jobs:
 
   build-and-push:
     needs: sonarcloud-analysis
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/template-build-and-push.yml
     with:
       aws_region: us-east-1
@@ -68,6 +74,9 @@ jobs:
   deploy-dev:
     needs: build-and-push
     if: success()
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/template-deploy-dev.yml
     with:
       aws_region: us-east-1
