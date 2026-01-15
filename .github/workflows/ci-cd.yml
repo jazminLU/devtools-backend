@@ -36,14 +36,14 @@ env:
 
 jobs:
   lint-and-test:
-    uses: ./.github/workflows/cicd-templates/lint-and-test.yml
+    uses: ./.github/workflows/template-lint-and-test.yml
     with:
       python_version: '3.11'
       test_files: 'tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py'
 
   sonarcloud-analysis:
     needs: lint-and-test
-    uses: ./.github/workflows/cicd-templates/sonarcloud-analysis.yml
+    uses: ./.github/workflows/template-sonarcloud-analysis.yml
     with:
       python_version: '3.11'
       sonar_org: jazminlu
@@ -54,7 +54,7 @@ jobs:
 
   build-and-push:
     needs: sonarcloud-analysis
-    uses: ./.github/workflows/cicd-templates/build-and-push.yml
+    uses: ./.github/workflows/template-build-and-push.yml
     with:
       aws_region: us-east-1
       ecr_registry: 558497223978.dkr.ecr.us-east-1.amazonaws.com
@@ -68,7 +68,7 @@ jobs:
   deploy-dev:
     needs: build-and-push
     if: success()
-    uses: ./.github/workflows/cicd-templates/deploy-dev.yml
+    uses: ./.github/workflows/template-deploy-dev.yml
     with:
       aws_region: us-east-1
       ecr_registry: 558497223978.dkr.ecr.us-east-1.amazonaws.com
