@@ -71,7 +71,7 @@ ingress:
     alb.ingress.kubernetes.io/unhealthy-threshold-count: '3'
     # SSL/TLS certificate (ARN del certificado en ACM) - IMPORTANTE: Descomenta y configura
     # Usa el mismo certificado que el frontend o crea uno específico para api.infra-moon.com
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:558497223978:certificate/13491f89-d778-4aef-a41c-c798a074144e
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:558497223978:certificate/0030a136-17b6-4444-9dac-ebbbd3cb4c77
     # Tags para el ALB
     alb.ingress.kubernetes.io/tags: Environment=dev,Project=devtools-playground,Component=backend-api
   hosts:
