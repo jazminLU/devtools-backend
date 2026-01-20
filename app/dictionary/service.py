@@ -35,63 +35,84 @@ class DictionaryService:
         """
         Add a word with its definition to the dictionary.
         
+        Validates input, checks for duplicates (case-insensitive), and creates
+        a new dictionary entry. Normalizes word to lowercase for storage.
+        
         Args:
-            word: The word to add
+            word: The word to add (will be normalized to lowercase)
             definition: The definition of the word
             
         Returns:
             The created dictionary entry
             
         Raises:
-            DictionaryWordAlreadyExistsError: If word already exists
+            DictionaryWordAlreadyExistsError: If word already exists (case-insensitive)
             ValueError: If word or definition is invalid
         """
+        # Validate and normalize inputs
         self._validate_word_input(word, definition)
+        normalized_word = word.strip().lower()
+        normalized_definition = definition.strip()
         
         # Check if word already exists (case-insensitive)
-        existing = self._repository.find_by_word(word)
+        existing = self._repository.find_by_word(normalized_word)
         if existing:
-            logger.warning(f"Attempted to add duplicate word: {word}")
-            raise DictionaryWordAlreadyExistsError(word)
+            logger.warning(
+                f"Attempted to add duplicate word: '{word}' "
+                f"(normalized: '{normalized_word}')"
+            )
+            raise DictionaryWordAlreadyExistsError(normalized_word)
         
         # Create entry with transaction handling
         try:
-            entry = self._repository.create(word, definition)
+            entry = self._repository.create(normalized_word, normalized_definition)
             self._repository.commit()
-            logger.info(f"Successfully added word: {word} to database")
+            logger.info(
+                f"Successfully added word: '{normalized_word}' "
+                f"with definition: '{normalized_definition[:50]}...'"
+            )
             return entry
         except IntegrityError as e:
             self._repository.rollback()
-            logger.error(f"Database integrity error adding word: {word} - {str(e)}")
-            raise DictionaryWordAlreadyExistsError(word)
+            logger.error(
+                f"Database integrity error adding word: '{normalized_word}' - {str(e)}"
+            )
+            raise DictionaryWordAlreadyExistsError(normalized_word)
         except ValueError as e:
             self._repository.rollback()
-            logger.error(f"Validation error adding word: {word} - {str(e)}")
+            logger.error(f"Validation error adding word: '{word}' - {str(e)}")
             raise
     
     def get_word(self, word: str) -> DictionaryEntry:
         """
-        Retrieve a dictionary entry by word.
+        Retrieve a dictionary entry by word (case-insensitive search).
+        
+        Normalizes the input word to lowercase for lookup. Returns the
+        dictionary entry if found, otherwise raises an exception.
         
         Args:
-            word: The word to retrieve
+            word: The word to retrieve (will be normalized to lowercase)
             
         Returns:
-            The dictionary entry
+            The dictionary entry with word and definition
             
         Raises:
-            DictionaryWordNotFoundError: If word not found
-            ValueError: If word is invalid
+            DictionaryWordNotFoundError: If word not found (after normalization)
+            ValueError: If word is invalid or empty
         """
         if not word or not word.strip():
-            raise ValueError("Word cannot be empty")
+            raise ValueError("Word cannot be empty or only whitespace")
         
-        entry = self._repository.find_by_word(word)
+        normalized_word = word.strip().lower()
+        entry = self._repository.find_by_word(normalized_word)
+        
         if not entry:
-            logger.warning(f"Word not found: {word}")
-            raise DictionaryWordNotFoundError(word)
+            logger.warning(
+                f"Word not found: '{word}' (searched as: '{normalized_word}')"
+            )
+            raise DictionaryWordNotFoundError(normalized_word)
         
-        logger.info(f"Retrieved definition for word: {word}")
+        logger.info(f"Retrieved definition for word: '{normalized_word}'")
         return entry
     
     @staticmethod
