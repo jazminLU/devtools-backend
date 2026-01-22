@@ -113,17 +113,34 @@ jobs:
           echo "Release name: \`${{ inputs.helm_chart_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          # Create a temporary values file to override backend.ingress.hosts
+          cat > /tmp/backend-ingress-override.yaml <<EOF
+          backend:
+            ingress:
+              hosts:
+                - host: api.infra-moon.com
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: devtools-playground-backend-backend
+                          port: 8000
+          ingress:
+            enabled: false
+          EOF
+          
           helm upgrade --install ${{ inputs.helm_chart_name }} \
             oci://${{ inputs.ecr_registry }}/${{ inputs.helm_chart_repo }} \
             --version ${{ inputs.helm_chart_version }} \
             --namespace ${{ inputs.namespace }} \
             --create-namespace \
             --values ${{ inputs.values_file }} \
+            --values /tmp/backend-ingress-override.yaml \
             --set backend.enabled=true \
             --set backend.image.repository=${{ inputs.ecr_registry }}/${{ inputs.image_repo }} \
             --set backend.image.tag=${{ steps.sha.outputs.short_sha }} \
             --set backend.env.GIT_COMMIT_SHA=${{ steps.sha.outputs.short_sha }} \
-            --set-json 'backend.ingress.hosts=[{"host":"api.infra-moon.com","paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"devtools-playground-backend-backend","port":8000}}}]}]' \
             --set frontend.enabled=false
           
           echo "" >> $GITHUB_STEP_SUMMARY
