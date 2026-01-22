@@ -85,7 +85,7 @@ jobs:
       eks_cluster_name: moon-dev-eks
       helm_chart_repo: devtools-playground
       helm_chart_name: devtools-playground-backend
-      helm_chart_version: '1.0.4'
+      helm_chart_version: '1.0.5'
       namespace: 'devtools-playground'
       values_file: 'helm/values-moon-dev.yaml'
       aws_role_arn: arn:aws:iam::558497223978:role/github-actions-devtools-backend
