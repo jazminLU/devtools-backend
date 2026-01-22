@@ -122,6 +122,7 @@ jobs:
             --set backend.enabled=true \
             --set backend.image.repository=${{ inputs.ecr_registry }}/${{ inputs.image_repo }} \
             --set backend.image.tag=${{ steps.sha.outputs.short_sha }} \
+            --set backend.env.GIT_COMMIT_SHA=${{ steps.sha.outputs.short_sha }} \
             --set frontend.enabled=false
           
           echo "" >> $GITHUB_STEP_SUMMARY

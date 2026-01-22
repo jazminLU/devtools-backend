@@ -17,12 +17,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Create FastAPI application with enhanced OpenAPI/Swagger configuration
-app = FastAPI(
-    title=settings.APP_NAME,
-    description="""
-    A collection of developer utilities
-    
-    ## Interactive Documentation
+# Build description with commit SHA if available
+api_description = "A collection of developer utilities"
+if settings.GIT_COMMIT_SHA:
+    api_description += f"\n\n**Commit:** `{settings.GIT_COMMIT_SHA}`"
+api_description += """
+
+## Interactive Documentation
     
     This API includes interactive documentation (Swagger UI) that allows you to:
     - Test all endpoints directly from the browser
@@ -48,7 +49,10 @@ app = FastAPI(
     - Swagger UI (Interactive): http://localhost:8000/docs
     - ReDoc (Alternative): http://localhost:8000/redoc
     - OpenAPI JSON: http://localhost:8000/openapi.json
-    """,
+    """
+app = FastAPI(
+    title=settings.APP_NAME,
+    description=api_description,
     version=settings.APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -123,7 +127,7 @@ async def root() -> dict:
     
     Returns basic information about the API and links to interactive documentation.
     """
-    return {
+    response = {
         "message": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "description": settings.APP_DESCRIPTION,
@@ -139,6 +143,9 @@ async def root() -> dict:
             "health": "/health"
         }
     }
+    if settings.GIT_COMMIT_SHA:
+        response["commit"] = settings.GIT_COMMIT_SHA
+    return response
 
 
 @app.get(

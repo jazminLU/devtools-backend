@@ -33,6 +33,7 @@ class Settings(BaseSettings):
         default="A collection of developer utilities",
         description="Application description"
     )
+    GIT_COMMIT_SHA: str | None = Field(default=None, description="Git commit SHA from CI/CD pipeline")
     
     # CORS settings
     CORS_ORIGINS: str = Field(
