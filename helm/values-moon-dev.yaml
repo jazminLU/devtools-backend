@@ -51,36 +51,40 @@ backend:
     timeoutSeconds: 5
     failureThreshold: 3
 
+  # Backend Ingress Configuration for api.infra-moon.com
+  # Movido de la sección 'ingress' a 'backend.ingress' para usar el nuevo template backend-ingress.yaml
+  # de la versión 1.0.2 del chart
+  ingress:
+    enabled: true
+    className: "alb"
+    annotations:
+      # AWS ALB Ingress Controller annotations
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
+      # Health check configuration
+      alb.ingress.kubernetes.io/healthcheck-path: /health
+      alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+      alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+      alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+      alb.ingress.kubernetes.io/unhealthy-threshold-count: '3'
+      # SSL/TLS certificate (ARN del certificado en ACM)
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:558497223978:certificate/0030a136-17b6-4444-9dac-ebbbd3cb4c77
+      # Tags para el ALB
+      alb.ingress.kubernetes.io/tags: Environment=dev,Project=devtools-playground,Component=backend-api
+    hosts:
+      - host: api.infra-moon.com
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                # Nombre correcto del servicio del backend
+                name: devtools-playground-backend-backend
+                port: 8000
+    tls: []
+
 frontend:
   enabled: false
-
-ingress:
-  enabled: true
-  className: "alb"
-  annotations:
-    # AWS ALB Ingress Controller annotations
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
-    # Health check configuration
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
-    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
-    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
-    alb.ingress.kubernetes.io/unhealthy-threshold-count: '3'
-    # SSL/TLS certificate (ARN del certificado en ACM) - IMPORTANTE: Descomenta y configura
-    # Usa el mismo certificado que el frontend o crea uno específico para api.infra-moon.com
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:558497223978:certificate/0030a136-17b6-4444-9dac-ebbbd3cb4c77
-    # Tags para el ALB
-    alb.ingress.kubernetes.io/tags: Environment=dev,Project=devtools-playground,Component=backend-api
-  hosts:
-    - host: api.infra-moon.com
-      paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: backend
-              port: 8000
 
