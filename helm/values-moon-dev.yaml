@@ -14,7 +14,7 @@ backend:
     repository: 558497223978.dkr.ecr.us-east-1.amazonaws.com/moon-backend
     tag: "latest"
     pullPolicy: IfNotPresent
-  replicas: 2
+  replicas: 1
   service:
     type: ClusterIP
     port: 8000

@@ -43,12 +43,6 @@ api_description += """
     
     ### Word Concatenation
     - POST /word/concat - Concatenate characters from words
-    
-    ## Documentation Access
-    
-    - Swagger UI (Interactive): http://localhost:8000/docs
-    - ReDoc (Alternative): http://localhost:8000/redoc
-    - OpenAPI JSON: http://localhost:8000/openapi.json
     """
 app = FastAPI(
     title=settings.APP_NAME,
