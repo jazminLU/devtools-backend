@@ -16,7 +16,7 @@ on:
       test_files:
         required: false
         type: string
-        default: 'tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py'
+        default: 'tests/'
     secrets:
       SONAR_TOKEN:
         required: true
@@ -49,16 +49,45 @@ jobs:
         with:
           name: coverage-reports
           path: .
+          if-no-files-found: error
 
-      - name: Verify coverage.xml exists
+      - name: Verify coverage.xml exists and is valid
         run: |
+          echo "=== Current directory ==="
+          pwd
+          echo ""
+          echo "=== Directory contents ==="
+          ls -la
+          echo ""
           if [ -f coverage.xml ]; then
-            echo "coverage.xml found"
+            echo "✅ coverage.xml found"
             ls -lh coverage.xml
+            echo ""
+            echo "=== Coverage XML file info (first 30 lines) ==="
+            head -30 coverage.xml || true
+            echo ""
+            echo "=== Verifying XML structure ==="
+            if command -v xmllint &> /dev/null; then
+              xmllint --noout coverage.xml && echo "✅ XML is valid" || echo "⚠️ XML validation failed"
+            else
+              echo "xmllint not available, skipping XML validation"
+            fi
           else
-            echo "coverage.xml not found, generating it..."
-            pytest ${{ inputs.test_files }} \
-              --cov=app --cov-report=xml --cov-report=term-missing -v || true
+            echo "❌ ERROR: coverage.xml not found after download!"
+            echo "Attempting to generate it as fallback..."
+            pip install -r requirements.txt
+            pytest "${{ inputs.test_files }}" \
+              --cov=app \
+              --cov-report=xml \
+              --cov-report=term-missing \
+              -v \
+              || true
+            if [ -f coverage.xml ]; then
+              echo "✅ coverage.xml generated as fallback"
+            else
+              echo "❌ Failed to generate coverage.xml"
+              exit 1
+            fi
           fi
 
       - name: SonarCloud Scan
@@ -75,6 +104,7 @@ jobs:
             -Dsonar.sources=app
             -Dsonar.exclusions=**/__pycache__/**,**/alembic/**,**/.venv/**,**/venv/**,**/*.pyc,**/tests/**
             -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.coverage.exclusions=**/tests/**,**/__pycache__/**,**/alembic/**,**/venv/**,**/.venv/**
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.test.inclusions=**/test_*.py
             -Dsonar.test.exclusions=**/__pycache__/**
