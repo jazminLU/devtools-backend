@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from app.core.utils import validate_not_empty
 from app.dictionary.db_models import DictionaryEntry
 
 
@@ -78,7 +79,7 @@ class DictionaryRepository(IDictionaryRepository):
         if not word or not word.strip():
             return None
             
-        word_lower = word.lower().strip()
+        word_lower = word.strip().lower()
         return self._db.query(DictionaryEntry).filter(
             func.lower(DictionaryEntry.word) == word_lower
         ).first()
@@ -97,14 +98,12 @@ class DictionaryRepository(IDictionaryRepository):
         Raises:
             ValueError: If word or definition is empty
         """
-        if not word or not word.strip():
-            raise ValueError("Word cannot be empty")
-        if not definition or not definition.strip():
-            raise ValueError("Definition cannot be empty")
+        word = validate_not_empty(word, "Word")
+        definition = validate_not_empty(definition, "Definition")
         
         entry = DictionaryEntry(
-            word=word.strip(),
-            definition=definition.strip()
+            word=word,
+            definition=definition
         )
         self._db.add(entry)
         self._db.flush()  # Flush to get ID without committing
