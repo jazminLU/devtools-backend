@@ -30,7 +30,7 @@ env:
   HELM_CHART_REPO: devtools-playground
   HELM_CHART_NAME: devtools-playground-backend
   EKS_CLUSTER_NAME: moon-dev-eks
-  SONAR_ORG: jazminlu
+  SONAR_ORG: jazminlu-moon
   SONAR_PROJECT_KEY: jazminLU_devtools-backend
   AWS_ROLE_ARN: arn:aws:iam::558497223978:role/github-actions-devtools-backend
 
@@ -49,7 +49,7 @@ jobs:
     uses: ./.github/workflows/template-sonarcloud-analysis.yml
     with:
       python_version: '3.11'
-      sonar_org: jazminlu
+      sonar_org: jazminlu-moon
       sonar_project_key: jazminLU_devtools-backend
       test_files: 'tests/'
     secrets:
