@@ -8,6 +8,7 @@ from app.core.exceptions import (
     DictionaryWordNotFoundError,
     DictionaryWordAlreadyExistsError
 )
+from app.core.utils import normalize_string, validate_not_empty
 from app.dictionary.repository import IDictionaryRepository, DictionaryRepository
 from app.dictionary.db_models import DictionaryEntry
 
@@ -51,8 +52,8 @@ class DictionaryService:
         """
         # Validate and normalize inputs
         self._validate_word_input(word, definition)
-        normalized_word = word.strip().lower()
-        normalized_definition = definition.strip()
+        normalized_word = normalize_string(word, to_lower=True)
+        normalized_definition = normalize_string(definition)
         
         # Check if word already exists (case-insensitive)
         existing = self._repository.find_by_word(normalized_word)
@@ -100,10 +101,7 @@ class DictionaryService:
             DictionaryWordNotFoundError: If word not found (after normalization)
             ValueError: If word is invalid or empty
         """
-        if not word or not word.strip():
-            raise ValueError("Word cannot be empty or only whitespace")
-        
-        normalized_word = word.strip().lower()
+        normalized_word = normalize_string(word, to_lower=True)
         entry = self._repository.find_by_word(normalized_word)
         
         if not entry:
@@ -127,10 +125,8 @@ class DictionaryService:
         Raises:
             ValueError: If validation fails
         """
-        if not word or not word.strip():
-            raise ValueError("Word cannot be empty")
-        if not definition or not definition.strip():
-            raise ValueError("Definition cannot be empty")
+        validate_not_empty(word, "Word")
+        validate_not_empty(definition, "Definition")
 
 
 def get_dictionary_service(db: Session) -> DictionaryService:
