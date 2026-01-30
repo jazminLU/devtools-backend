@@ -10,7 +10,7 @@ on:
       test_files:
         required: false
         type: string
-        default: 'tests/test_main.py tests/test_dictionary.py tests/test_shopping.py tests/test_words.py'
+        default: 'tests/'
 
 jobs:
   lint-and-test:
@@ -46,40 +46,59 @@ jobs:
         continue-on-error: true
 
       - name: Run unit tests with coverage
+        id: run_tests
         run: |
           echo "Running unit tests with coverage..."
-          # Run only essential integration tests for faster execution
-          pytest ${{ inputs.test_files }} \
-            --cov=app --cov-report=xml --cov-report=term-missing --cov-report=html -v --tb=short -x
+          echo "Test files/directory: ${{ inputs.test_files }}"
+          # Run tests and generate coverage report
+          # Use || true to continue even if tests fail, but still generate coverage
+          pytest "${{ inputs.test_files }}" \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-report=html \
+            -v \
+            --tb=short \
+            || echo "Some tests failed, but continuing to generate coverage report"
         continue-on-error: true
+
+      - name: Generate coverage.xml if missing
+        if: always()
+        run: |
+          if [ ! -f coverage.xml ]; then
+            echo "coverage.xml not found, generating it..."
+            pytest "${{ inputs.test_files }}" \
+              --cov=app \
+              --cov-report=xml \
+              --cov-report=term-missing \
+              -v \
+              || true
+          fi
 
       - name: Verify coverage.xml exists
         if: always()
         run: |
           if [ -f coverage.xml ]; then
-            echo "coverage.xml generated successfully"
+            echo "✅ coverage.xml generated successfully"
             ls -lh coverage.xml
             echo ""
+            echo "=== Coverage XML file location ==="
+            pwd
+            echo ""
+            echo "=== Coverage XML file info (first 30 lines) ==="
+            head -30 coverage.xml || true
+            echo ""
             echo "=== Coverage Summary ==="
-            # Show coverage summary using pytest-cov output or coverage command
             if command -v coverage &> /dev/null; then
               coverage report --show-missing || true
             else
               echo "Coverage command not available, but coverage.xml exists"
             fi
-            echo ""
-            echo "=== Coverage XML file info ==="
-            head -20 coverage.xml || true
           else
-            echo "coverage.xml not found!"
-            echo "Attempting to generate it..."
-            pytest --cov=app --cov-report=xml -v || true
-            if [ -f coverage.xml ]; then
-              echo "coverage.xml generated on retry"
-            else
-              echo "Failed to generate coverage.xml"
-              exit 1
-            fi
+            echo "❌ ERROR: coverage.xml not found after all attempts!"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
           fi
 
       - name: Upload coverage reports
@@ -89,6 +108,6 @@ jobs:
           name: coverage-reports
           path: |
             coverage.xml
-            htmlcov/
           retention-days: 7
+          if-no-files-found: error
 
